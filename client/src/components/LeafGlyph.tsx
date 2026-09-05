@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+
 // The same falcate leaf silhouette as the app icon (see
 // client/scripts/generate-icons.mjs) — reused here as the shared visual
 // vocabulary for actions, rating, and the branch itself.
@@ -8,11 +10,18 @@ type LeafGlyphProps = {
   color?: string
   size?: number
   className?: string
+  style?: CSSProperties
 }
 
-export function LeafGlyph({ variant = 'solid', color = 'currentColor', size = 14, className = '' }: LeafGlyphProps) {
+export function LeafGlyph({
+  variant = 'solid',
+  color = 'currentColor',
+  size = 14,
+  className = '',
+  style,
+}: LeafGlyphProps) {
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} className={className} aria-hidden="true">
+    <svg viewBox="0 0 100 100" width={size} height={size} className={className} style={style} aria-hidden="true">
       <path
         d={LEAF_PATH}
         transform={variant === 'falling' ? 'rotate(35 50 50)' : undefined}

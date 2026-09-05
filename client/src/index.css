@@ -141,26 +141,31 @@ body {
   }
 }
 
-/* The loading heartbeat used while a real generation is in flight. */
+/* The loading heartbeat used while a real generation is in flight. Scale +
+   opacity rather than a rounded shape — posters and buttons are the only
+   things allowed a radius here, so this breathes instead of pulsing as a
+   dot (BRIEF.md §6 "nothing else is rounded"). */
 @keyframes leaf-pulse {
   0%,
   100% {
-    background: var(--color-bloom);
-    transform: scale(1);
+    transform: scale(0.8);
+    opacity: 0.45;
   }
   40% {
-    background: var(--color-sickle);
-    transform: scale(1.3);
+    transform: scale(1.15);
+    opacity: 1;
   }
 }
 
 .leaf-pulse-dot {
   animation: leaf-pulse 1.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .leaf-pulse-dot {
     animation: none;
-    background: var(--color-sickle);
+    opacity: 1;
   }
 }
