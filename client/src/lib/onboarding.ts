@@ -13,3 +13,16 @@ export function isScreeningDone(): boolean {
 export function markScreeningDone(): void {
   localStorage.setItem(KEY, 'true')
 }
+
+// A one-time personal note shown right after screening, before calibration.
+// Same pattern as screeningDone — pure client-side navigation state, not
+// part of the synced Profile blob.
+const MESSAGE_KEY = 'bluegum:fathersDayMessageShown'
+
+export function isFathersDayMessageShown(): boolean {
+  return localStorage.getItem(MESSAGE_KEY) === 'true'
+}
+
+export function markFathersDayMessageShown(): void {
+  localStorage.setItem(MESSAGE_KEY, 'true')
+}

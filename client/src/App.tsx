@@ -1,8 +1,14 @@
 import { useState } from 'react'
 import { TabBar, type Tab } from './components/TabBar'
-import { isScreeningDone, markScreeningDone } from './lib/onboarding'
+import {
+  isFathersDayMessageShown,
+  isScreeningDone,
+  markFathersDayMessageShown,
+  markScreeningDone,
+} from './lib/onboarding'
 import { About } from './screens/About'
 import { Calibration } from './screens/Calibration'
+import { FathersDayMessage } from './screens/FathersDayMessage'
 import { Picks } from './screens/Picks'
 import { Saved } from './screens/Saved'
 import { Screening } from './screens/Screening'
@@ -31,6 +37,7 @@ function MainApp() {
 function Gate() {
   const { profile } = useProfile()
   const [screeningDone, setScreeningDone] = useState(() => isScreeningDone())
+  const [messageShown, setMessageShown] = useState(() => isFathersDayMessageShown())
 
   if (!screeningDone) {
     return (
@@ -38,6 +45,17 @@ function Gate() {
         onDone={() => {
           markScreeningDone()
           setScreeningDone(true)
+        }}
+      />
+    )
+  }
+
+  if (!messageShown) {
+    return (
+      <FathersDayMessage
+        onContinue={() => {
+          markFathersDayMessageShown()
+          setMessageShown(true)
         }}
       />
     )
