@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AVOID_OPTIONS, type Pacing } from '../../../shared/types'
+import { LoadingBranch } from '../components/LoadingBranch'
 import { PillButton } from '../components/PillButton'
 import { useProfile } from '../state/ProfileContext'
 
@@ -28,7 +29,7 @@ export function Calibration() {
   if (isGeneratingFirstPicks) {
     return (
       <div className="flex min-h-svh items-center justify-center px-6">
-        <p className="font-serif text-md text-heartwood">Finding your first picks…</p>
+        <LoadingBranch label="Finding your first picks…" />
       </div>
     )
   }

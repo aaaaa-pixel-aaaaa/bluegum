@@ -1,16 +1,43 @@
 import { useState } from 'react'
 import type { Pick } from '../../../shared/types'
 import { Branch, BranchItem } from '../components/Branch'
+import { LeafGlyph } from '../components/LeafGlyph'
 import { PillButton } from '../components/PillButton'
 import { Poster } from '../components/Poster'
 import { RatingSheet } from '../components/RatingSheet'
 import { TopBar } from '../components/TopBar'
 import { useProfile } from '../state/ProfileContext'
 
+const EXIT_MS = 420
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 export function Picks({ onAbout }: { onAbout: () => void }) {
   const { profile, dismiss, save, rate, refresh, refreshStatus } = useProfile()
   const [rating, setRating] = useState<Pick | null>(null)
+  const [exiting, setExiting] = useState<Map<number, 'fall' | 'settle'>>(new Map())
   const shown = profile.lastPicks?.shown ?? []
+
+  // Plays the exit animation on the list item first, then applies the real
+  // change once it's done — the buffer backfill happens invisibly under an
+  // item that already left the screen.
+  function runExit(tmdbId: number, kind: 'fall' | 'settle', action: () => void) {
+    if (prefersReducedMotion()) {
+      action()
+      return
+    }
+    setExiting((prev) => new Map(prev).set(tmdbId, kind))
+    setTimeout(() => {
+      action()
+      setExiting((prev) => {
+        const next = new Map(prev)
+        next.delete(tmdbId)
+        return next
+      })
+    }, EXIT_MS)
+  }
 
   return (
     <div className="pb-28">
@@ -44,15 +71,28 @@ export function Picks({ onAbout }: { onAbout: () => void }) {
               align={i % 2 === 0 ? 'left' : 'right'}
               poster={<Poster posterPath={pick.posterPath} title={pick.title} />}
               animateIndex={i}
+              exit={exiting.get(pick.tmdbId)}
             >
               <p className="font-serif text-lg text-heartwood">
                 {pick.title}, {pick.year}
               </p>
               <p className="mt-2 max-w-[60ch] font-serif text-md text-heartwood">{pick.reason}</p>
               <div className={`mt-4 flex flex-wrap gap-2 ${i % 2 === 0 ? '' : 'justify-end'}`}>
-                <PillButton onClick={() => setRating(pick)}>Seen it</PillButton>
-                <PillButton onClick={() => dismiss(pick)}>Not for me</PillButton>
-                <PillButton onClick={() => save(pick)}>Save for later</PillButton>
+                <PillButton icon={<LeafGlyph variant="solid" size={12} />} onClick={() => setRating(pick)}>
+                  Seen it
+                </PillButton>
+                <PillButton
+                  icon={<LeafGlyph variant="falling" size={12} />}
+                  onClick={() => runExit(pick.tmdbId, 'fall', () => dismiss(pick))}
+                >
+                  Not for me
+                </PillButton>
+                <PillButton
+                  icon={<LeafGlyph variant="hollow" size={12} />}
+                  onClick={() => runExit(pick.tmdbId, 'settle', () => save(pick))}
+                >
+                  Save for later
+                </PillButton>
               </div>
             </BranchItem>
           ))}
@@ -64,8 +104,9 @@ export function Picks({ onAbout }: { onAbout: () => void }) {
           title={`${rating.title}, ${rating.year}`}
           onCancel={() => setRating(null)}
           onRate={(score) => {
-            void rate(rating, score)
+            const target = rating
             setRating(null)
+            runExit(target.tmdbId, 'settle', () => void rate(target, score))
           }}
         />
       )}

@@ -79,3 +79,88 @@ body {
     transform: none;
   }
 }
+
+/* Press feedback that spreads from where the thumb actually landed. */
+@keyframes ripple-out {
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.ripple {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  transform: scale(0);
+  opacity: 0.3;
+  background: var(--color-sickle);
+  animation: ripple-out 480ms ease-out forwards;
+}
+
+.ripple.ripple-light {
+  background: var(--color-paper);
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ripple {
+    display: none;
+  }
+}
+
+/* A dismissed pick falls away like a dropped leaf; a saved/seen one just
+   settles out — same idea (the slot is clearing), different feeling (let go
+   vs. kept). Both play before the underlying data actually changes. */
+@keyframes leaf-fall {
+  to {
+    transform: translateX(36px) translateY(14px) rotate(12deg);
+    opacity: 0;
+  }
+}
+
+@keyframes leaf-settle {
+  to {
+    transform: scale(0.97);
+    opacity: 0;
+  }
+}
+
+.exit-fall {
+  animation: leaf-fall 420ms ease-in forwards;
+}
+
+.exit-settle {
+  animation: leaf-settle 420ms ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exit-fall,
+  .exit-settle {
+    animation: none;
+  }
+}
+
+/* The loading heartbeat used while a real generation is in flight. */
+@keyframes leaf-pulse {
+  0%,
+  100% {
+    background: var(--color-bloom);
+    transform: scale(1);
+  }
+  40% {
+    background: var(--color-sickle);
+    transform: scale(1.3);
+  }
+}
+
+.leaf-pulse-dot {
+  animation: leaf-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaf-pulse-dot {
+    animation: none;
+    background: var(--color-sickle);
+  }
+}
