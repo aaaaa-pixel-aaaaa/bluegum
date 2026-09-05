@@ -24,7 +24,7 @@ export function RatingSheet({ title, onRate, onCancel }: RatingSheetProps) {
             </PillButton>
           ))}
         </div>
-        <PillButton onClick={onCancel} className="mt-6 w-full border-none">
+        <PillButton onClick={onCancel} className="mt-6 w-full">
           Cancel
         </PillButton>
       </div>
