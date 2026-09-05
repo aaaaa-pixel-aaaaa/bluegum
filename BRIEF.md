@@ -74,6 +74,9 @@ The client holds no API keys.
   be dodged by rotating deviceIds. The IP cap is the real backstop protecting
   the Anthropic bill.
 - Never log or return the API keys.
+- `deviceId` travels as an `X-Device-Id` header on `/tmdb/*` and `/recommend`
+  (both are rate-limited by it); on `/profile/:deviceId` it's the path
+  segment instead.
 
 ### Secrets — all via `wrangler secret put`, never committed
 

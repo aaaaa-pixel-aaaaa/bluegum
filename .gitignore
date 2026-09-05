@@ -2,6 +2,7 @@ node_modules
 dist
 dist-ssr
 .wrangler
+.dev.vars
 .env
 .env.local
 .DS_Store
