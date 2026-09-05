@@ -1,8 +1,58 @@
+import { useState } from 'react'
+import { TabBar, type Tab } from './components/TabBar'
+import { isScreeningDone, markScreeningDone } from './lib/onboarding'
+import { About } from './screens/About'
+import { Calibration } from './screens/Calibration'
+import { Picks } from './screens/Picks'
+import { Saved } from './screens/Saved'
+import { Screening } from './screens/Screening'
+import { Seen } from './screens/Seen'
+import { ProfileProvider, useProfile } from './state/ProfileContext'
+
+function MainApp() {
+  const [tab, setTab] = useState<Tab>('picks')
+  const [showAbout, setShowAbout] = useState(false)
+
+  if (showAbout) return <About onBack={() => setShowAbout(false)} />
+
+  return (
+    <>
+      {tab === 'picks' && <Picks onAbout={() => setShowAbout(true)} />}
+      {tab === 'saved' && <Saved onAbout={() => setShowAbout(true)} />}
+      {tab === 'seen' && <Seen onAbout={() => setShowAbout(true)} />}
+      <TabBar active={tab} onChange={setTab} />
+    </>
+  )
+}
+
+// Onboarding gating is derived from the profile shape rather than a stored
+// "screen" — seeds.length for Screening, !!lastPicks for Calibration (see
+// lib/onboarding.ts for why Screening alone needs its own persisted flag).
+function Gate() {
+  const { profile } = useProfile()
+  const [screeningDone, setScreeningDone] = useState(() => isScreeningDone())
+
+  if (!screeningDone) {
+    return (
+      <Screening
+        onDone={() => {
+          markScreeningDone()
+          setScreeningDone(true)
+        }}
+      />
+    )
+  }
+
+  if (!profile.lastPicks) return <Calibration />
+
+  return <MainApp />
+}
+
 function App() {
   return (
-    <main className="flex min-h-svh items-center justify-center">
-      <p className="font-serif text-md text-heartwood">Bluegum is growing.</p>
-    </main>
+    <ProfileProvider>
+      <Gate />
+    </ProfileProvider>
   )
 }
 

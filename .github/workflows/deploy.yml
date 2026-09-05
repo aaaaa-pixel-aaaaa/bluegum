@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'client/**'
+      - 'shared/**'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -31,6 +32,9 @@ jobs:
         working-directory: client
       - run: npm run build
         working-directory: client
+        env:
+          VITE_WORKER_URL: ${{ secrets.VITE_WORKER_URL }}
+          VITE_APP_SECRET: ${{ secrets.VITE_APP_SECRET }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: client/dist

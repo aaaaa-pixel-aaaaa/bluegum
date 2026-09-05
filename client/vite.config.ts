@@ -7,4 +7,8 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: '/bluegum/',
   plugins: [react(), tailwindcss()],
+  // Allows importing ../shared/types.ts, which sits outside this package's
+  // own root (no workspace/build step ties client and worker together —
+  // see BRIEF.md's file-structure notes).
+  server: { fs: { allow: ['..'] } },
 })
