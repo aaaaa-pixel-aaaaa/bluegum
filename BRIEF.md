@@ -29,7 +29,9 @@ that sentence as the most important thing on the screen.
 
 - Vite + React + TypeScript, Tailwind
 - Deployed to GitHub Pages via GitHub Actions on push to `main`
-- Cloudflare Worker as API proxy and storage
+- Cloudflare Worker as API proxy and storage — deployed manually via
+  `wrangler deploy` from a local machine. No CI for the Worker, no Cloudflare
+  credentials stored in GitHub secrets.
 - Cloudflare Workers KV for profile backup
 - TMDB for catalogue data, posters, and search
 - Anthropic API (`claude-haiku-4-5-20251001`) for the recommendations themselves
@@ -61,9 +63,16 @@ The client holds no API keys.
 ### Worker security
 
 - Require an `X-App-Secret` header on every route. Reject anything without it.
-  This is not real auth; it stops drive-by abuse of a public URL.
+  This is not real auth; it stops drive-by abuse of a public URL. Note that
+  because the client is a static bundle on GitHub Pages, this secret ships in
+  plain text in the shipped JS — it deters casual scripted hits, nothing more.
 - Rate limit per `deviceId` in KV with a TTL: 20/hour on `/recommend`,
   200/hour on `/tmdb/*`.
+- Additionally rate limit `/recommend` per IP address (`CF-Connecting-IP`),
+  20/hour, tracked independently of the deviceId limit. `deviceId` is
+  client-supplied and the app secret is public, so a deviceId-only limit can
+  be dodged by rotating deviceIds. The IP cap is the real backstop protecting
+  the Anthropic bill.
 - Never log or return the API keys.
 
 ### Secrets — all via `wrangler secret put`, never committed
@@ -87,12 +96,16 @@ type Profile = {
   calibration: {
     subtitlesOk: boolean;
     pacing: 'patient' | 'either' | 'brisk';
-    avoid: string[];         // free text, e.g. "horror", "musicals"
+    avoid: string[];         // labels from the tappable chip set, see §7
   };
   ratings: Rating[];
   saved: Title[];            // saved for later, not yet watched
   dismissed: number[];       // tmdb ids never to show again
-  lastPicks?: { generatedAt: string; picks: Pick[] };
+  lastPicks?: {
+    generatedAt: string;
+    shown: Pick[];            // currently on screen, up to 5
+    buffer: Pick[];           // grounded survivors not yet shown — see §5
+  };
 };
 
 type Title  = { tmdbId: number; mediaType: 'movie' | 'tv'; title: string; year: number; posterPath: string | null };
@@ -112,7 +125,8 @@ type Pick   = Title & { reason: string };
 
 ## 5. How recommendations work
 
-One Claude call per refresh. No local scoring engine, no candidate pipeline.
+One Claude call per generation. No local scoring engine, no candidate
+pipeline.
 
 **Step 1.** Build a compact text summary of the profile: the seeds with years,
 the ratings with scores, the calibration answers, and the titles already seen,
@@ -120,20 +134,35 @@ saved, or dismissed.
 
 **Step 2.** Send it to Claude with a system prompt establishing it as a
 well-read film programmer who makes specific, non-obvious recommendations and
-explains them in one plain sentence. Ask for **eight** picks as strict JSON —
+explains them in one plain sentence. Ask for **twelve** picks as strict JSON —
 no prose, no markdown fences — each with title, year, media type, and reason.
 
-**Step 3.** Resolve each returned title against TMDB search by title and year.
-Silently drop anything with no confident match. This is the grounding step: it
-means a hallucinated film never reaches the screen.
+**Step 3.** Resolve each of the twelve returned titles against TMDB search by
+title and year. Silently drop anything with no confident match. This is the
+grounding step: it means a hallucinated film never reaches the screen. If
+fewer than five survive, show what survived — do not retry the Claude call on
+account of grounding shortfall (the malformed-JSON retry in Step 6 is a
+separate case).
 
-**Step 4.** Show the first five that survived. Cache in `lastPicks`.
+**Step 4.** Show the first five survivors on Picks. Keep the rest as a buffer
+in `lastPicks.buffer`.
 
-**Step 5.** Only regenerate on explicit refresh or after a new rating. Never on
-app open.
+**Step 5.** Generation (a real Claude call) only happens when:
+  - a new rating is submitted, or
+  - the user hits explicit refresh, or
+  - the buffer drops below 3 (checked automatically whenever a slot is
+    cleared; this refill happens silently in the background, the same way a
+    KV write does — no spinner, no user action).
 
-Parse defensively. If the JSON is malformed, retry once, then show the cached
-picks with a quiet note that it couldn't refresh.
+  Never on plain app open.
+
+**Step 6.** Acting on a pick — "Seen it" (after rating), "Not for me", or
+"Save for later" — clears that slot from `shown` and pulls the next item from
+`buffer` to replace it. This does **not** call Claude, except that submitting
+a rating separately satisfies the Step 5 rating trigger and starts a real
+generation afterward. Parse defensively: if the JSON from a generation is
+malformed, retry the call once, then show the cached `shown` picks with a
+quiet note that it couldn't refresh.
 
 Prompt requirements:
 - Explicitly exclude everything in seeds, ratings, saved, and dismissed.
@@ -143,7 +172,6 @@ Prompt requirements:
 - Reasons must reference his actual taste, not the film's plot. "You rated
   three Sidney Lumet films highly and this is the one everybody forgets" beats
   "A gripping courtroom drama."
-- Enable prompt caching on the system prompt.
 
 ---
 
@@ -199,10 +227,18 @@ in rank order, like alternate leaves on a branch.
 - Single column, generous vertical rhythm, roughly 64px between picks.
 - Posters keep their native rectangular corners. No border radius, no shadow,
   no card, no container. They sit directly on the paper.
-- Buttons are pills. Different radii for different things is deliberate.
+- Radius rule, no exceptions: pills on buttons, native square corners on
+  posters, nothing else is rounded.
 - Line length under 60 characters for the serif.
 - The same stem carries the poster thumbnails during screening, so onboarding
   and the main screen are visibly the same place.
+
+### App icon
+
+A single sickle eucalypt leaf silhouette: `paper` leaf on a `sickle`
+background. No text, no other colours, no gradient. It has to read clearly at
+60px on a home screen — draw it simpler than feels necessary. No veins, no
+serration, no fine detail that disappears at that size.
 
 ### Motion
 
@@ -226,9 +262,18 @@ this is a touch device.
    result adds a poster thumbnail to the stem. "Done" enables at five picks;
    don't force ten.
 2. **Calibration.** Three questions, one per screen, large tappable answers,
-   skippable. Subtitles, pacing, and anything he'd never watch.
+   skippable. Subtitles and pacing are simple choices. "Anything he'd never
+   watch" is a bank of about ten tappable chips covering genre and mood —
+   multi-select, no keyboard, chip labels populate `avoid` directly:
+   Horror, Musicals, Reality TV, True crime, Broad comedy, Romance-forward,
+   Anime, Slow / arthouse pacing, High violence or gore, Long prestige dramas
+   (multi-season commitment).
 3. **Picks.** The home screen. The hanging branch. Each pick offers "Seen it"
-   (opens rating), "Not for me" (dismiss), "Save for later".
+   (opens rating), "Not for me" (dismiss), "Save for later". All three clear
+   that slot and pull the next candidate from the buffer (see §5) — no Claude
+   call, except that a submitted rating separately triggers a real
+   generation. A manual refresh action is always available and always calls
+   Claude regardless of buffer state.
 4. **Saved.** What he's kept but not watched.
 5. **Seen.** What he's rated, with the option to change a score.
 6. **About.** TMDB attribution, backup and restore.
@@ -247,6 +292,11 @@ yet. Anything you keep turns up here."*
 
 - `manifest.json` with `display: "standalone"`, name, short_name,
   `theme_color: "#EEF2EC"`, `background_color: "#EEF2EC"`
+- Repo is `bluegum`, served as a GitHub Pages project subpath, no custom
+  domain. Three values must always agree: Vite's `base`, the manifest's
+  `start_url`, and the manifest's `scope` — all `/bluegum/`. **Flag it
+  immediately if these three ever drift apart** — a mismatch here is the most
+  common way a GitHub Pages PWA silently fails to launch in standalone mode.
 - Icons at 180×180 (apple-touch-icon), 192×192, 512×512
 - `<meta name="apple-mobile-web-app-capable" content="yes">`
 - `<meta name="apple-mobile-web-app-status-bar-style" content="default">`
@@ -268,19 +318,20 @@ Non-negotiable. It is a condition of the free non-commercial licence.
 
 ## 10. Build order
 
-Do not start a step until the previous one is deployed and verified on a real
-iPhone.
+Three phases. Do not start a phase until the previous one is deployed and
+verified.
 
-1. Scaffold, GitHub Action, blank page live on the Pages URL
-2. PWA manifest, icons, safe-area handling — installed and checked on device
-3. Worker with TMDB proxy, verified by curl
-4. Screening and calibration, profile in localStorage
-5. `/recommend` endpoint and the picks screen
-6. Rating loop
-7. KV sync, export and restore
-8. About screen, attribution, final device pass
+**Phase A — shell.** Scaffold, GitHub Action, PWA manifest, icons, safe-area
+handling. The app renders one line of text. Install it on a real iPhone and
+verify standalone mode before continuing.
 
-Steps 6 and 7 are the ones to cut if time runs out. Never cut step 2.
+**Phase B — Worker.** TMDB proxy, app secret check, both rate limits
+(deviceId and IP). `/recommend` and the profile routes stubbed. Verify with
+curl.
+
+**Phase C — everything else.** Screening, calibration, `/recommend`, picks
+screen, rating loop, KV sync, export/restore, About screen. Build it all,
+then walk through what was built.
 
 ---
 
@@ -290,4 +341,6 @@ Steps 6 and 7 are the ones to cut if time runs out. Never cut step 2.
 - No accounts, no login. The deviceId is the only identity.
 - Minimal dependencies. Every package is one I maintain in eighteen months
   when he asks why it stopped working.
+- Tests: Vitest on the recommendation JSON-parsing-and-TMDB-grounding
+  function only. No component tests, no Worker route tests.
 - Commit after every step with a clear message.
